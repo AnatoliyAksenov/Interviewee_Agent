@@ -79,3 +79,10 @@ async def recruiter_training_session(
 @app.get("/recruiter-training-check")
 async def get_recruiter_training_check():
     return FileResponse("app/frontend/recruiter-training-check.html")
+
+@app.get("/recruiter-training-check-results")
+async def get_recruiter_training_check_results():
+    """
+    Страница с результатами оценки кандидата.
+    """
+    return FileResponse("app/frontend/recruiter-training-check-results.html")

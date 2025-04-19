@@ -110,7 +110,7 @@
             <!-- Кнопка завершения -->
             <div class="flex justify-center mt-6">
                 <button type="submit" class="bg-green-600 hover:bg-green-700 px-6 py-3 rounded text-white font-semibold">
-                    Завершить сессию
+                    Перейти к результатам
                 </button>
             </div>
         </form>
@@ -122,7 +122,7 @@
             const trainingHistory = JSON.parse(localStorage.getItem('trainingHistory') || '{}');
             
             // Обработка отправки формы
-            document.getElementById('evaluationForm').addEventListener('submit', function(e) {
+            document.getElementById('evaluationForm').addEventListener('submit', async function(e) {
                 e.preventDefault();
                 
                 // Собираем данные формы
@@ -134,32 +134,44 @@
                     career_adaptability: document.querySelector('input[name="career_adaptability"]:checked').value
                 };
 
-                // Объединяем данные истории беседы и оценки
-                const finalData = {
-                    ...trainingHistory,
-                    evaluation: formData,
-                    evaluationTimestamp: new Date().toISOString()
-                };
+                try {
+                    // Отправляем данные на сервер
+                    const response = await fetch('/save-evaluation', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            timestamp: trainingHistory.timestamp,
+                            evaluation: formData
+                        })
+                    });
 
-                // Создаем и скачиваем файл
-                const jsonData = JSON.stringify(finalData, null, 2);
-                const blob = new Blob([jsonData], { type: 'application/json' });
-                const fileName = `recruiter_training_${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
-                
-                const downloadLink = document.createElement('a');
-                downloadLink.href = URL.createObjectURL(blob);
-                downloadLink.download = fileName;
-                document.body.appendChild(downloadLink);
-                downloadLink.click();
-                document.body.removeChild(downloadLink);
-                
-                // Очищаем localStorage
-                localStorage.removeItem('trainingHistory');
-                
-                // Перенаправляем на главную страницу
-                setTimeout(() => {
-                    window.location.href = '/';
-                }, 1000);
+                    if (!response.ok) {
+                        throw new Error('Ошибка при сохранении оценки');
+                    }
+
+                    // Получаем данные от сервера
+                    const result = await response.json();
+
+                    // Создаем и скачиваем файл
+                    const blob = new Blob([JSON.stringify(result.data, null, 2)], { type: 'application/json' });
+                    const downloadLink = document.createElement('a');
+                    downloadLink.href = URL.createObjectURL(blob);
+                    downloadLink.download = result.file_name;
+                    document.body.appendChild(downloadLink);
+                    downloadLink.click();
+                    document.body.removeChild(downloadLink);
+
+                    // Сохраняем результаты в localStorage для следующей страницы
+                    localStorage.setItem('assessmentResults', JSON.stringify(result.data));
+                    
+                    // Перенаправляем на страницу результатов
+                    window.location.href = '/recruiter-training-check-results';
+                } catch (error) {
+                    console.error('Ошибка:', error);
+                    alert('Произошла ошибка при сохранении оценки. Пожалуйста, попробуйте еще раз.');
+                }
             });
         });
     </script>
