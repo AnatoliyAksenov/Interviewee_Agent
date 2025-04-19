@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Интервью</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body class="flex flex-col justify-center items-center bg-[#2B2D33] min-h-screen font-sans">
     <div class="bg-white shadow mt-6 p-6 rounded w-full max-w-4xl">
@@ -318,7 +319,7 @@
         console.log(response);
         
         const intermediateElement = document.getElementById('intermediate-evaluation');
-        intermediateElement.textContent = response.content;
+        intermediateElement.innerHTML = marked.parse(response.content);
         intermediateElement.className = 'mb-2 mt-2 p-2 text-center rounded bg-green-100 text-black-700';
         intermediateElement.classList.remove('hidden');
         disableInterface(false);
