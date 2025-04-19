@@ -1,6 +1,6 @@
 from fastapi import FastAPI, Request, Depends
 from fastapi.templating import Jinja2Templates
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, FileResponse
 
 from app.api.evaluation import router as evaluation_router
 from app.api.interview import router as interview_router
@@ -75,3 +75,14 @@ async def recruiter_training_session(
             "honesty": honesty
         }
     )
+
+@app.get("/recruiter-training-check")
+async def get_recruiter_training_check():
+    return FileResponse("app/frontend/recruiter-training-check.html")
+
+@app.get("/recruiter-training-check-results")
+async def get_recruiter_training_check_results():
+    """
+    Страница с результатами оценки кандидата.
+    """
+    return FileResponse("app/frontend/recruiter-training-check-results.html")

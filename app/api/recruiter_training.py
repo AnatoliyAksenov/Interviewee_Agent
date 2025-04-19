@@ -1,9 +1,11 @@
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query, Request, HTTPException
 import base64
 import json
 import os
 import random
+import glob
 from datetime import datetime
+from openai import AsyncOpenAI
 
 from app.model.ttt import TTT
 from app.model.stt import STT
@@ -42,6 +44,38 @@ PERSONALITY_PROFILES = [
     "depressive_realist",
     "suppressed_observer"
 ]
+
+def calculate_assessment_metrics(assessment_results):
+    """
+    Рассчитывает метрики на основе результатов оценки.
+    """
+    # Проверяем, что у нас достаточно результатов
+    if len(assessment_results) != 24:
+        return {
+            "error": "Недостаточно данных для расчета метрик"
+        }
+    
+    try:
+        # Расчет сумм по группам
+        interest_sum = sum(result["score"] for result in assessment_results[0:6])
+        control_sum = sum(result["score"] for result in assessment_results[6:12])
+        curiosity_sum = sum(result["score"] for result in assessment_results[12:18])
+        confidence_sum = sum(result["score"] for result in assessment_results[18:24])
+        
+        # Расчет общей суммы
+        total_adaptability = interest_sum + control_sum + curiosity_sum + confidence_sum
+        
+        return {
+            "interest": interest_sum,
+            "control": control_sum,
+            "curiosity": curiosity_sum,
+            "confidence": confidence_sum,
+            "career_adaptability": total_adaptability
+        }
+    except Exception as e:
+        return {
+            "error": f"Ошибка при расчете метрик: {str(e)}"
+        }
 
 @router.websocket("/ws/recruiter-training")
 async def websocket_recruiter_training(
@@ -89,7 +123,89 @@ async def websocket_recruiter_training(
             json_data = json.loads(data)
 
             if json_data["type"] == "end_session":
-                # Сохраняем лог беседы при получении сообщения о завершении
+                # Проводим психологическую оценку перед завершением
+                assessment_prompt = """Тебе будет предложен список утверждений. На каждое утверждение нужно дать один из следующих ответов:
+- Сильнее всего (5 баллов)
+- Очень сильно (4 балла)
+- Сильно (3 балла)
+- В средней степени (2 балла)
+- Меньше всего (1 балл)
+
+ВАЖНО:
+1. Отвечай строго в контексте своего профиля и предыдущей беседы
+2. Сохраняй последовательность и логику ответов
+3. Учитывай свой уровень опыта и тип личности
+4. Будь честен в соответствии с заданным уровнем честности
+5. Формат ответа должен быть строго таким:
+   {
+     "statement": "текст утверждения",
+     "score": число от 1 до 5,
+     "answer": "один из пяти вариантов ответа",
+     "explanation": "краткое объяснение почему выбран этот ответ"
+   }"""
+
+                # Список утверждений для оценки
+                statements = [
+                    "Задумываюсь о том, каким будет мое будущее",
+                    "Осознаю, что сегодняшний выбор определяет мое будущее",
+                    "Готовлюсь к будущему",
+                    "Понимаю, какие решения я должен принять в области образовательного и профессионального выбора",
+                    "Планирую, как достичь свои цели",
+                    "Задумываюсь о своей карьере",
+                    "Стараюсь не унывать",
+                    "Принимаю решения самостоятельно",
+                    "Беру на себя ответственность за свои действия",
+                    "Отстаиваю свои убеждения",
+                    "Рассчитываю на себя",
+                    "Делаю то, что мне по душе",
+                    "Исследую мое окружение",
+                    "Ищу возможности для личностного роста",
+                    "Изучаю варианты, прежде чем сделать выбор",
+                    "Рассматриваю различные способы выполнения той или иной работы",
+                    "Глубоко вникаю в суть вопросов, которые у меня возникают",
+                    "Интересуюсь новыми возможностями",
+                    "Эффективно выполняю задачи",
+                    "Стараюсь делать все хорошо",
+                    "Приобретаю новые навыки",
+                    "Работаю в меру своих способностей",
+                    "Преодолеваю препятствия",
+                    "Решаю проблемы"
+                ]
+
+                # Получаем ответы на все утверждения
+                assessment_results = []
+                for statement in statements:
+                    # Добавляем инструкции и утверждение в историю
+                    messages = [
+                        ttt.create_chat_message("system", assessment_prompt),
+                        ttt.create_chat_message("user", f"Оцени следующее утверждение: {statement}")
+                    ]
+                    
+                    # Получаем ответ от агента
+                    response = await Runner.run(agent, messages)
+                    try:
+                        response_data = json.loads(response.final_output)
+                        assessment_results.append(response_data)
+                    except json.JSONDecodeError:
+                        assessment_results.append({
+                            "statement": statement,
+                            "score": 0,
+                            "answer": "Ошибка обработки",
+                            "explanation": "Не удалось получить корректный ответ"
+                        })
+                    
+                    # Отправляем прогресс клиенту
+                    progress = int((len(assessment_results) / len(statements)) * 100)
+                    await ws.send_json({
+                        "type": "assessment_progress",
+                        "progress": progress,
+                        "current_statement": statement
+                    })
+
+                # Рассчитываем метрики
+                assessment_metrics = calculate_assessment_metrics(assessment_results)
+                
+                # Сохраняем лог беседы и результаты оценки
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 filename = f"{LOGS_DIR}/recruiter_training_{timestamp}.json"
                 
@@ -104,11 +220,22 @@ async def websocket_recruiter_training(
                         "type": selected_profile,
                         "description": profile_description
                     },
-                    "messages": conversation_history["messages"]
+                    "messages": conversation_history["messages"],
+                    "psychological_assessment": {
+                        "responses": assessment_results,
+                        "metrics": assessment_metrics
+                    }
                 }
                 
                 with open(filename, "w", encoding="utf-8") as f:
                     json.dump(final_log, f, ensure_ascii=False, indent=2)
+
+                # Отправляем результаты оценки клиенту
+                await ws.send_json({
+                    "type": "assessment_complete",
+                    "results": assessment_results,
+                    "metrics": assessment_metrics
+                })
                     
                 await ws.close(code=1000)
                 return
@@ -194,3 +321,52 @@ async def websocket_recruiter_training(
             
             with open(filename, "w", encoding="utf-8") as f:
                 json.dump(final_log, f, ensure_ascii=False, indent=2) 
+
+@router.post("/save-evaluation")
+async def save_evaluation(request: Request):
+    """
+    Сохраняет оценку рекрутера в существующий файл логов и возвращает путь к файлу.
+    """
+    try:
+        data = await request.json()
+        timestamp = data.get("timestamp")
+        evaluation = data.get("evaluation")
+
+        if not timestamp or not evaluation:
+            raise HTTPException(status_code=400, detail="Отсутствуют необходимые данные")
+
+        # Ищем самый свежий файл лога
+        log_files = glob.glob(f"{LOGS_DIR}/recruiter_training_*.json")
+        if not log_files:
+            raise HTTPException(status_code=404, detail="Файлы логов не найдены")
+
+        # Сортируем файлы по времени создания (самый новый первый)
+        log_files.sort(key=os.path.getctime, reverse=True)
+        target_file = log_files[0]
+
+        # Читаем существующий файл
+        with open(target_file, "r", encoding="utf-8") as f:
+            log_data = json.load(f)
+
+        # Добавляем оценку рекрутера
+        log_data["recruiter_evaluation"] = {
+            "evaluation": evaluation,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+
+        # Сохраняем обновленный файл
+        with open(target_file, "w", encoding="utf-8") as f:
+            json.dump(log_data, f, ensure_ascii=False, indent=2)
+
+        # Возвращаем путь к файлу и данные для скачивания
+        return {
+            "status": "success",
+            "file_path": target_file,
+            "file_name": os.path.basename(target_file),
+            "data": log_data
+        }
+
+    except json.JSONDecodeError as e:
+        raise HTTPException(status_code=400, detail=f"Ошибка в формате данных: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ошибка при сохранении оценки: {str(e)}") 

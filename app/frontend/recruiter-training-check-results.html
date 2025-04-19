@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Результаты оценки</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .metric-bar {
+            width: 100%;
+            height: 24px;
+            background: #f3f4f6;
+            position: relative;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        .metric-bar-fill {
+            height: 100%;
+            background: #3b82f6;
+            transition: width 0.5s ease;
+        }
+        .metric-scale {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 4px;
+            color: #6b7280;
+            font-size: 0.875rem;
+        }
+        .metric-value {
+            position: absolute;
+            right: 8px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #ffffff;
+            font-weight: 700;
+            font-size: 1rem;
+            text-shadow: 1px 1px 0 rgba(0,0,0,0.5);
+            background: rgba(0,0,0,0.2);
+            padding: 0 8px;
+            border-radius: 4px;
+        }
+        .level-indicator {
+            font-weight: 600;
+            padding: 2px 8px;
+            border-radius: 4px;
+            margin-left: 8px;
+        }
+        .level-low { background: #fee2e2; color: #991b1b; }
+        .level-medium { background: #fef3c7; color: #92400e; }
+        .level-high { background: #dcfce7; color: #166534; }
+        .scale-description {
+            background: #f8fafc;
+            border-left: 4px solid #3b82f6;
+            padding: 1.5rem;
+            margin: 2rem 0;
+            border-radius: 0 8px 8px 0;
+        }
+        .scale-description h3 {
+            color: #1e40af;
+            font-weight: 600;
+            margin-bottom: 1rem;
+        }
+        .scale-description ul {
+            list-style-type: none;
+            padding: 0;
+        }
+        .scale-description li {
+            margin-bottom: 1rem;
+            padding-left: 1.5rem;
+            position: relative;
+        }
+        .scale-description li:before {
+            content: "•";
+            color: #3b82f6;
+            font-weight: bold;
+            position: absolute;
+            left: 0;
+        }
+        .scale-description p {
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid #e2e8f0;
+            font-style: italic;
+            color: #475569;
+        }
+    </style>
+</head>
+<body class="flex flex-col justify-center items-center bg-[#2B2D33] min-h-screen font-sans">
+    <div class="bg-white shadow mt-6 p-6 rounded w-full max-w-4xl">
+        <h1 class="text-2xl font-bold mb-6 text-center">Результаты оценки кандидата</h1>
+        
+        <!-- Результаты психологической оценки -->
+        <div class="mb-8">
+            <h2 class="text-xl font-semibold mb-4">Результаты психологической оценки</h2>
+            <div id="psychMetrics" class="space-y-6">
+                <!-- Данные будут добавлены через JavaScript -->
+            </div>
+        </div>
+
+        <!-- Описание шкал -->
+        <div class="scale-description">
+            <h3>Описание оцениваемых характеристик</h3>
+            <ul>
+                <li><strong>Заинтересованность</strong> показывает, насколько человек ориентирован на свое профессиональное будущее и готовится к нему.</li>
+                <li><strong>Контроль</strong> указывает на степень, в которой человек готов принять на себя ответственность за свое профессиональное развитие.</li>
+                <li><strong>Любознательность</strong> отражает, склонен ли и насколько способен человек изучать профессиональную среду, собирая нужную информацию о профессиональных возможностях.</li>
+                <li><strong>Уверенность</strong> отражает степень осознания своей способности принимать продуманные решения, связанные с профессиональным развитием, преуспевать в достижении профессиональных целей и успешно преодолевать стрессовые ситуации.</li>
+            </ul>
+            <p>Общая шкала, рассчитываемая как сумма всех четырех шкал, – <strong>карьерная адаптивность</strong>. Она представляет собой ключевую способность для достижения успеха в развитии карьеры и связана с готовностью человека решать предсказуемые и непредсказуемые задачи профессионального развития.</p>
+        </div>
+
+        <!-- Оценка рекрутера -->
+        <div class="mb-8">
+            <h2 class="text-xl font-semibold mb-4">Оценка рекрутера</h2>
+            <div id="recruiterEval" class="space-y-2">
+                <!-- Данные будут добавлены через JavaScript -->
+            </div>
+        </div>
+
+        <!-- Кнопка завершения -->
+        <div class="flex justify-center mt-6">
+            <button onclick="finishSession()" class="bg-green-600 hover:bg-green-700 px-6 py-3 rounded text-white font-semibold">
+                Завершить сессию
+            </button>
+        </div>
+    </div>
+
+    <script>
+        const METRICS_CONFIG = {
+            interest: {
+                label: 'Заинтересованность',
+                ranges: {
+                    low: { min: 6, max: 14 },
+                    medium: { min: 15, max: 26 },
+                    high: { min: 27, max: 30 }
+                },
+                maxValue: 30
+            },
+            control: {
+                label: 'Контроль',
+                ranges: {
+                    low: { min: 6, max: 17 },
+                    medium: { min: 18, max: 27 },
+                    high: { min: 28, max: 30 }
+                },
+                maxValue: 30
+            },
+            curiosity: {
+                label: 'Любознательность',
+                ranges: {
+                    low: { min: 6, max: 15 },
+                    medium: { min: 16, max: 26 },
+                    high: { min: 27, max: 30 }
+                },
+                maxValue: 30
+            },
+            confidence: {
+                label: 'Уверенность',
+                ranges: {
+                    low: { min: 6, max: 16 },
+                    medium: { min: 17, max: 26 },
+                    high: { min: 27, max: 30 }
+                },
+                maxValue: 30
+            },
+            career_adaptability: {
+                label: 'Карьерная адаптивность',
+                ranges: {
+                    low: { min: 24, max: 69 },
+                    medium: { min: 70, max: 101 },
+                    high: { min: 102, max: 120 }
+                },
+                maxValue: 120
+            }
+        };
+
+        function getLevel(value, ranges) {
+            if (value <= ranges.low.max) return 'low';
+            if (value <= ranges.medium.max) return 'medium';
+            return 'high';
+        }
+
+        function getLevelLabel(level) {
+            const labels = {
+                low: 'низкий уровень',
+                medium: 'средний уровень',
+                high: 'высокий уровень'
+            };
+            return labels[level];
+        }
+
+        function createMetricElement(key, value, config) {
+            const level = getLevel(value, config.ranges);
+            const percentage = (value / config.maxValue) * 100;
+            
+            const metricDiv = document.createElement('div');
+            metricDiv.className = 'mb-4';
+            
+            const headerDiv = document.createElement('div');
+            headerDiv.className = 'flex items-center mb-2';
+            
+            const label = document.createElement('span');
+            label.className = 'font-semibold';
+            label.textContent = config.label;
+            
+            const levelSpan = document.createElement('span');
+            levelSpan.className = `level-indicator level-${level}`;
+            levelSpan.textContent = getLevelLabel(level);
+            
+            headerDiv.appendChild(label);
+            headerDiv.appendChild(levelSpan);
+            
+            const barContainer = document.createElement('div');
+            barContainer.className = 'metric-bar';
+            
+            const barFill = document.createElement('div');
+            barFill.className = 'metric-bar-fill';
+            barFill.style.width = `${percentage}%`;
+            
+            const valueSpan = document.createElement('span');
+            valueSpan.className = 'metric-value';
+            valueSpan.textContent = value;
+            
+            barFill.appendChild(valueSpan);
+            barContainer.appendChild(barFill);
+            
+            const scaleDiv = document.createElement('div');
+            scaleDiv.className = 'metric-scale';
+            
+            const ranges = [
+                `[${config.ranges.low.min}-${config.ranges.low.max}]`,
+                `[${config.ranges.medium.min}-${config.ranges.medium.max}]`,
+                `[${config.ranges.high.min}-${config.ranges.high.max}]`
+            ];
+            
+            ranges.forEach(range => {
+                const span = document.createElement('span');
+                span.textContent = range;
+                scaleDiv.appendChild(span);
+            });
+            
+            metricDiv.appendChild(headerDiv);
+            metricDiv.appendChild(barContainer);
+            metricDiv.appendChild(scaleDiv);
+            
+            return metricDiv;
+        }
+
+        function getLevelFromValue(value) {
+            return value === 'high' ? 'высокий уровень' :
+                   value === 'medium' ? 'средний уровень' :
+                   value === 'low' ? 'низкий уровень' : value;
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            const results = JSON.parse(localStorage.getItem('assessmentResults') || '{}');
+            const psychMetrics = results.psychological_assessment?.metrics || {};
+            const psychMetricsDiv = document.getElementById('psychMetrics');
+            
+            // Отображаем метрики психологической оценки
+            Object.entries(psychMetrics).forEach(([key, value]) => {
+                if (METRICS_CONFIG[key]) {
+                    const metricElement = createMetricElement(key, value, METRICS_CONFIG[key]);
+                    psychMetricsDiv.appendChild(metricElement);
+                }
+            });
+
+            // Отображаем оценку рекрутера
+            const recruiterEval = results.recruiter_evaluation?.evaluation || {};
+            const recruiterEvalDiv = document.getElementById('recruiterEval');
+
+            Object.entries(recruiterEval).forEach(([key, value]) => {
+                if (METRICS_CONFIG[key]) {
+                    const div = document.createElement('div');
+                    div.className = 'p-3 bg-gray-50 rounded flex items-center justify-between';
+                    
+                    const labelSpan = document.createElement('span');
+                    labelSpan.className = 'font-medium';
+                    labelSpan.textContent = METRICS_CONFIG[key].label;
+                    
+                    const valueSpan = document.createElement('span');
+                    valueSpan.className = `level-indicator level-${value}`;
+                    valueSpan.textContent = getLevelFromValue(value);
+                    
+                    div.appendChild(labelSpan);
+                    div.appendChild(valueSpan);
+                    recruiterEvalDiv.appendChild(div);
+                }
+            });
+        });
+
+        function finishSession() {
+            localStorage.removeItem('trainingHistory');
+            localStorage.removeItem('assessmentResults');
+            window.location.href = '/';
+        }
+    </script>
+</body>
+</html> 
