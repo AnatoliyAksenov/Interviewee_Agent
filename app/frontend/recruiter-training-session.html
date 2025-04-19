@@ -51,8 +51,8 @@
             </button>
         </form>
         <div class="flex justify-between space-x-2 mt-4">
-            <button id="endInterviewBtn" onclick="endInterview()" class="bg-red-600 hover:bg-red-700 px-4 py-2 rounded text-white">
-                Завершить тренировку
+            <button id="endInterviewBtn" onclick="goToEvaluation()" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded text-white">
+                Перейти к оценке
             </button>
             <span id="recordingStatus" class="text-gray-600"></span>
             <button id="recordButton" onclick="toggleRecording()" class="bg-blue-600 hover:bg-red-600 px-4 py-2 rounded text-white" disabled>
@@ -61,6 +61,19 @@
         </div>
     </div>
     
+    <!-- Добавляем HTML для модального окна с прогрессом -->
+    <div id="progressModal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center">
+        <div class="bg-white p-6 rounded-lg shadow-xl max-w-md w-full">
+            <h3 class="text-lg font-semibold mb-4">Проводится психологическая оценка</h3>
+            <div class="mb-4">
+                <div class="w-full bg-gray-200 rounded-full h-2.5">
+                    <div id="progressBar" class="bg-blue-600 h-2.5 rounded-full" style="width: 0%"></div>
+                </div>
+            </div>
+            <p id="progressStatus" class="text-sm text-gray-600 text-center">Подготовка к оценке...</p>
+        </div>
+    </div>
+
     <script>
     // --- Получение и валидация параметров из URL ---
     const urlParams = new URLSearchParams(window.location.search);
@@ -162,26 +175,42 @@
     function handleWebSocketMessage(event) {
         try {
             const response = JSON.parse(event.data);
-            if (response.type === 'error') {
-                showError(`Ошибка: ${response.text}`);
-                resetWaitingState();
-                return;
+            
+            switch(response.type) {
+                case 'error':
+                    showError(`Ошибка: ${response.text}`);
+                    resetWaitingState();
+                    return;
+                
+                case 'assessment_progress':
+                    updateAssessmentProgress(response.progress, response.current_statement);
+                    return;
+                
+                case 'assessment_complete':
+                    // Сохраняем результаты оценки
+                    conversationHistory.psychological_assessment = response.results;
+                    // Переходим к странице оценки
+                    localStorage.setItem('trainingHistory', JSON.stringify(conversationHistory));
+                    window.location.href = '/recruiter-training-check';
+                    return;
+                
+                case 'text':
+                case 'voice':
+                    if (response.random_profile && !conversationHistory.random_profile) {
+                        conversationHistory.random_profile = response.random_profile;
+                    }
+                    processMessage(response);
+                    updateChatDisplay();
+                    hideStatusMessage();
+                    resetWaitingState();
+                    hideLoadingSpinner();
+                    break;
             }
-            if (['text', 'voice'].includes(response.type)) {
-                // Сохраняем информацию о random_profile из первого ответа
-                if (response.random_profile && !conversationHistory.random_profile) {
-                    conversationHistory.random_profile = response.random_profile;
-                }
-                processMessage(response);
-                updateChatDisplay();
-                hideStatusMessage();
-                resetWaitingState();
-                hideLoadingSpinner();  // Скрываем спиннер после получения ответа
-            }
-        } catch {
+        } catch (error) {
+            console.error('Error processing message:', error);
             showError('Ошибка обработки сообщения');
             resetWaitingState();
-            hideLoadingSpinner();  // Скрываем спиннер в случае ошибки
+            hideLoadingSpinner();
         }
     }
 
@@ -361,42 +390,53 @@
     }
 
     // --- Завершение тренировки ---
-    function endInterview() {
+    function goToEvaluation() {
         if (!conversationHistory.messages.length) {
-            alert("Нет данных для сохранения. Проведите тренировку перед сохранением.");
+            alert("Нет данных для оценки. Проведите тренировку перед оценкой.");
             return;
         }
+
+        // Показываем модальное окно с прогрессом
+        showProgressModal();
         
-        if (!confirm("Завершить тренировку и сохранить результаты?")) return;
+        // Отправляем сообщение о завершении сессии
+        ws.send(JSON.stringify({
+            type: "end_session",
+            ...conversationHistory
+        }));
+    }
+
+    function updateAssessmentProgress(progress, currentStatement) {
+        const progressBar = document.getElementById('progressBar');
+        const progressStatus = document.getElementById('progressStatus');
         
-        try {
-            // Экспортируем данные
-            exportInterviewData();
-            
-            // Отправляем сообщение о завершении сессии
-            if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({
-                    type: "end_session",
-                    ...conversationHistory  // Отправляем всю историю, включая random_profile
-                }));
-                
-                // Закрываем соединение
-                ws.close(1000, 'Session ended by user');
-                
-                // Показываем сообщение об успешном завершении
-                updateConnectionStatus('Сессия успешно завершена', 'green');
-                
-                // Отключаем интерфейс
-                disableInterface();
-                
-                // Перенаправляем на главную страницу через 2 секунды
-                setTimeout(() => {
-                    window.location.href = '/';
-                }, 2000);
-            }
-        } catch (error) {
-            alert('Ошибка при сохранении результатов тренировки: ' + error.message);
-        }
+        progressBar.style.width = `${progress}%`;
+        progressStatus.textContent = `Оценка утверждения: ${currentStatement}`;
+    }
+
+    // Добавляем HTML для модального окна с прогрессом
+    document.body.insertAdjacentHTML('beforeend', `
+        <div id="progressModal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center">
+            <div class="bg-white p-6 rounded-lg shadow-xl max-w-md w-full">
+                <h3 class="text-lg font-semibold mb-4">Проводится психологическая оценка</h3>
+                <div class="mb-4">
+                    <div class="w-full bg-gray-200 rounded-full h-2.5">
+                        <div id="progressBar" class="bg-blue-600 h-2.5 rounded-full" style="width: 0%"></div>
+                    </div>
+                </div>
+                <p id="progressStatus" class="text-sm text-gray-600 text-center">Подготовка к оценке...</p>
+            </div>
+        </div>
+    `);
+
+    function showProgressModal() {
+        const modal = document.getElementById('progressModal');
+        modal.classList.remove('hidden');
+    }
+
+    function hideProgressModal() {
+        const modal = document.getElementById('progressModal');
+        modal.classList.add('hidden');
     }
 
     // --- Функции для экспорта данных ---

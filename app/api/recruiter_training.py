@@ -1,9 +1,10 @@
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query, Request
 import base64
 import json
 import os
 import random
 from datetime import datetime
+from openai import AsyncOpenAI
 
 from app.model.ttt import TTT
 from app.model.stt import STT
@@ -89,7 +90,86 @@ async def websocket_recruiter_training(
             json_data = json.loads(data)
 
             if json_data["type"] == "end_session":
-                # Сохраняем лог беседы при получении сообщения о завершении
+                # Проводим психологическую оценку перед завершением
+                assessment_prompt = """Тебе будет предложен список утверждений. На каждое утверждение нужно дать один из следующих ответов:
+- Сильнее всего (5 баллов)
+- Очень сильно (4 балла)
+- Сильно (3 балла)
+- В средней степени (2 балла)
+- Меньше всего (1 балл)
+
+ВАЖНО:
+1. Отвечай строго в контексте своего профиля и предыдущей беседы
+2. Сохраняй последовательность и логику ответов
+3. Учитывай свой уровень опыта и тип личности
+4. Будь честен в соответствии с заданным уровнем честности
+5. Формат ответа должен быть строго таким:
+   {
+     "statement": "текст утверждения",
+     "score": число от 1 до 5,
+     "answer": "один из пяти вариантов ответа",
+     "explanation": "краткое объяснение почему выбран этот ответ"
+   }"""
+
+                # Список утверждений для оценки
+                statements = [
+                    "Задумываюсь о том, каким будет мое будущее",
+                    "Осознаю, что сегодняшний выбор определяет мое будущее",
+                    "Готовлюсь к будущему",
+                    "Понимаю, какие решения я должен принять в области образовательного и профессионального выбора",
+                    "Планирую, как достичь свои цели",
+                    "Задумываюсь о своей карьере",
+                    "Стараюсь не унывать",
+                    "Принимаю решения самостоятельно",
+                    "Беру на себя ответственность за свои действия",
+                    "Отстаиваю свои убеждения",
+                    "Рассчитываю на себя",
+                    "Делаю то, что мне по душе",
+                    "Исследую мое окружение",
+                    "Ищу возможности для личностного роста",
+                    "Изучаю варианты, прежде чем сделать выбор",
+                    "Рассматриваю различные способы выполнения той или иной работы",
+                    "Глубоко вникаю в суть вопросов, которые у меня возникают",
+                    "Интересуюсь новыми возможностями",
+                    "Эффективно выполняю задачи",
+                    "Стараюсь делать все хорошо",
+                    "Приобретаю новые навыки",
+                    "Работаю в меру своих способностей",
+                    "Преодолеваю препятствия",
+                    "Решаю проблемы"
+                ]
+
+                # Получаем ответы на все утверждения
+                assessment_results = []
+                for statement in statements:
+                    # Добавляем инструкции и утверждение в историю
+                    messages = [
+                        ttt.create_chat_message("system", assessment_prompt),
+                        ttt.create_chat_message("user", f"Оцени следующее утверждение: {statement}")
+                    ]
+                    
+                    # Получаем ответ от агента
+                    response = await Runner.run(agent, messages)
+                    try:
+                        response_data = json.loads(response.final_output)
+                        assessment_results.append(response_data)
+                    except json.JSONDecodeError:
+                        assessment_results.append({
+                            "statement": statement,
+                            "score": 0,
+                            "answer": "Ошибка обработки",
+                            "explanation": "Не удалось получить корректный ответ"
+                        })
+                    
+                    # Отправляем прогресс клиенту
+                    progress = int((len(assessment_results) / len(statements)) * 100)
+                    await ws.send_json({
+                        "type": "assessment_progress",
+                        "progress": progress,
+                        "current_statement": statement
+                    })
+
+                # Сохраняем лог беседы и результаты оценки
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 filename = f"{LOGS_DIR}/recruiter_training_{timestamp}.json"
                 
@@ -104,11 +184,18 @@ async def websocket_recruiter_training(
                         "type": selected_profile,
                         "description": profile_description
                     },
-                    "messages": conversation_history["messages"]
+                    "messages": conversation_history["messages"],
+                    "psychological_assessment": assessment_results
                 }
                 
                 with open(filename, "w", encoding="utf-8") as f:
                     json.dump(final_log, f, ensure_ascii=False, indent=2)
+
+                # Отправляем результаты оценки клиенту
+                await ws.send_json({
+                    "type": "assessment_complete",
+                    "results": assessment_results
+                })
                     
                 await ws.close(code=1000)
                 return
