@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Тренер Рекрутера (CAAS)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="flex flex-col justify-center items-center bg-[#2B2D33] min-h-screen font-sans">
+    <div class="bg-white shadow mt-6 p-6 rounded w-full max-w-4xl">
+        <h1 class="text-2xl font-bold mb-6 text-center">Тренажер для рекрутера</h1>
+        <p class="text-gray-600 mb-6 text-center">Выберите характеристики кандидата для тренировки навыков интервьюирования</p>
+        
+        <form id="training-form" class="space-y-6" onsubmit="startTraining(event)">
+            <!-- Позиция -->
+            <div class="space-y-2">
+                <label class="block text-sm font-medium text-gray-700">Позиция кандидата:</label>
+                <input 
+                    type="text" 
+                    name="position" 
+                    class="mt-1 block w-full p-2 border rounded-md" 
+                    placeholder="Например: Senior Python Developer, Junior Frontend Engineer, DevOps Engineer" 
+                    required
+                >
+                <div class="text-sm text-gray-500 mt-2 space-y-1">
+                    <p>Укажите должность, на которую проводите собеседование. Уровень кандидата определяется автоматически по следующим словам в названии позиции:</p>
+                    <ul class="list-disc pl-5 space-y-1">
+                        <li><span class="font-medium">Junior</span> → начальный уровень (0-2 года опыта)</li>
+                        <li><span class="font-medium">Middle</span> или отсутствие уровня → средний уровень (2-5 лет опыта)</li>
+                        <li><span class="font-medium">Senior/Lead/Head</span> → высокий уровень (более 5 лет опыта)</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Тип личности (скрытое поле) -->
+            <input type="hidden" name="personality" value="default">
+
+            <!-- Уровень честности -->
+            <div class="space-y-2">
+                <label class="block text-sm font-medium text-gray-700">Уровень честности:</label>
+                <select name="honesty" class="mt-1 block w-full p-2 border rounded-md" required>
+                    <option value="">Выберите уровень честности</option>
+                    <option value="normal">Обычный</option>
+                    <option value="very_honest">Предельно честный</option>
+                    <option value="exaggerating">Склонный к преувеличению</option>
+                </select>
+                <p class="text-sm text-gray-500 mt-1">Определяет, насколько правдиво кандидат отвечает на вопросы</p>
+            </div>
+
+            <div class="flex justify-between pt-4">
+                <a href="/" class="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded">
+                    Назад
+                </a>
+                <button type="submit" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded">
+                    Начать тренировку
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <script>
+    function startTraining(event) {
+        event.preventDefault();
+        const form = event.target;
+        const position = form.position.value.trim();
+        const personality = form.personality.value;
+        const honesty = form.honesty.value;
+
+        if (!position || !personality || !honesty) {
+            alert('Пожалуйста, заполните все поля');
+            return;
+        }
+
+        // Определяем уровень опыта на основе позиции
+        let experience = "intermediate"; // значение по умолчанию
+        const positionLower = position.toLowerCase();
+        if (positionLower.includes("junior")) {
+            experience = "beginner";
+        } else if (positionLower.includes("middle")) {
+            experience = "intermediate";
+        } else if (positionLower.includes("senior")) {
+            experience = "expert";
+        } else if (positionLower.includes("lead") || positionLower.includes("head")) {
+            experience = "expert";
+        }
+
+        window.location.href = `/recruiter-training-session?position=${encodeURIComponent(position)}&personality=${encodeURIComponent(personality)}&experience=${encodeURIComponent(experience)}&honesty=${encodeURIComponent(honesty)}`;
+    }
+    </script>
+</body>
+</html> 

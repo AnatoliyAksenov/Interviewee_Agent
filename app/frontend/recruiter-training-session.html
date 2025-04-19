@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Тренер Рекрутера (CAAS)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="flex flex-col justify-center items-center bg-[#2B2D33] min-h-screen font-sans">
+    <div class="bg-white shadow mt-6 p-6 rounded w-full max-w-4xl">
+        <div class="bg-gray-50 mb-4 p-2 rounded">
+            <h2 class="mb-2 font-semibold text-lg">Текущая сессия тренировки</h2>
+            <div class="flex gap-4">
+                <div class="flex-1">
+                    <p class="font-medium text-gray-700 text-sm">Позиция кандидата:</p>
+                    <p id="positionDisplay" class="mt-1 text-sm">{{ position if position else "Not specified" }}</p>
+                </div>
+                <div class="flex-1">
+                    <p class="font-medium text-gray-700 text-sm">Настроение кандидата:</p>
+                    <p id="personalityDisplay" class="mt-1 text-sm">{{ personality if personality else "Not specified" }}</p>
+                </div>
+                <div class="flex-1">
+                    <p class="font-medium text-gray-700 text-sm">Опыт кандидата:</p>
+                    <p id="experienceDisplay" class="mt-1 text-sm">{{ experience if experience else "Not specified" }}</p>
+                </div>
+                <div class="flex-1">
+                    <p class="font-medium text-gray-700 text-sm">Честность кандидата:</p>
+                    <p id="honestyDisplay" class="mt-1 text-sm">{{ honesty if honesty else "Not specified" }}</p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Статус соединения -->
+        <div id="connection-status" class="bg-yellow-100 mb-2 p-2 rounded text-yellow-700 text-center">
+            Подключение...
+        </div>
+        
+        <!-- Спиннер загрузки -->
+        <div id="loading-spinner" class="hidden">
+            <div class="flex items-center justify-center p-4">
+                <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+                <span class="ml-2 text-gray-600">Обработка...</span>
+            </div>
+        </div>
+        
+        <div id="messages" class="mb-4 p-4 border h-80 overflow-y-auto"></div>
+        <form id="chat-form" onsubmit="sendMessage(event)" class="flex space-x-2">
+            <input type="text" id="messageText" placeholder="Введите сообщение" class="flex-grow p-2 border rounded" disabled>
+            <button type="submit" class="bg-blue-500 hover:bg-blue-600 px-4 py-2 rounded text-white" disabled>
+                Отправить
+            </button>
+        </form>
+        <div class="flex justify-between space-x-2 mt-4">
+            <button id="endInterviewBtn" onclick="goToEvaluation()" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded text-white">
+                Перейти к оценке
+            </button>
+            <span id="recordingStatus" class="text-gray-600"></span>
+            <button id="recordButton" onclick="toggleRecording()" class="bg-blue-600 hover:bg-red-600 px-4 py-2 rounded text-white" disabled>
+                Записать голос
+            </button>
+        </div>
+    </div>
+    
+    <!-- Добавляем HTML для модального окна с прогрессом -->
+    <div id="progressModal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center">
+        <div class="bg-white p-6 rounded-lg shadow-xl max-w-md w-full">
+            <h3 class="text-lg font-semibold mb-4">Проводится психологическая оценка</h3>
+            <div class="mb-4">
+                <div class="w-full bg-gray-200 rounded-full h-2.5">
+                    <div id="progressBar" class="bg-blue-600 h-2.5 rounded-full" style="width: 0%"></div>
+                </div>
+            </div>
+            <p id="progressStatus" class="text-sm text-gray-600 text-center">Подготовка к оценке...</p>
+        </div>
+    </div>
+
+    <script>
+    // --- Получение и валидация параметров из URL ---
+    const urlParams = new URLSearchParams(window.location.search);
+    const currentPosition = urlParams.get('position');
+    const currentPersonality = urlParams.get('personality');
+    const currentExperience = urlParams.get('experience');
+    const currentHonesty = urlParams.get('honesty');
+
+    // Если параметры отсутствуют, возвращаем пользователя на форму
+    if (!currentPosition || !currentPersonality || !currentExperience || !currentHonesty) {
+        window.location.href = '/recruiter-training';
+    }
+
+    // --- Отображение выбранных параметров на странице ---
+    document.getElementById('positionDisplay').textContent = currentPosition;
+    document.getElementById('personalityDisplay').textContent = currentPersonality;
+    document.getElementById('experienceDisplay').textContent = currentExperience;
+    document.getElementById('honestyDisplay').textContent = currentHonesty;
+
+    // --- Глобальные переменные ---
+    let mediaRecorder;
+    let audioChunks = [];
+    let isRecording = false;
+    let isConnected = false;
+    let isWaitingForResponse = false;
+    let ws;
+
+    // --- Инструкции для разных стилей интервью ---
+    const style_instructions = {
+        "structured": "Проводите интервью структурированно, задавая заранее подготовленные вопросы в определенном порядке. Фокусируйтесь на конкретных компетенциях и опыте.",
+        "behavioral": "Используйте поведенческие вопросы, начинающиеся с 'Расскажите о ситуации, когда...'. Анализируйте реальный опыт кандидата.",
+        "situational": "Задавайте гипотетические вопросы вида 'Что бы вы сделали, если...'. Оценивайте подход кандидата к решению проблем.",
+        "stress": "Создавайте умеренное давление через сложные вопросы и временные ограничения. Оценивайте стрессоустойчивость."
+    };
+
+    // --- Инструкции для разных компетенций ---
+    const competency_instructions = {
+        "technical": "Фокусируйтесь на технических знаниях, задавайте вопросы по конкретным технологиям и решению технических задач.",
+        "soft": "Оценивайте soft skills: коммуникацию, работу в команде, адаптивность. Задавайте вопросы о межличностном взаимодействии.",
+        "leadership": "Исследуйте лидерские качества: принятие решений, делегирование, мотивацию команды.",
+        "problem_solving": "Фокусируйтесь на аналитическом мышлении и подходе к решению сложных задач.",
+        "communication": "Оценивайте навыки коммуникации: четкость изложения, умение слушать, презентационные навыки."
+    };
+
+    // --- История тренировки ---
+    const conversationHistory = {
+        timestamp: new Date().toISOString(),
+        position: currentPosition,
+        personality: currentPersonality,
+        experience: currentExperience,
+        honesty: currentHonesty,
+        random_profile: null,  // Будет установлено из первого ответа сервера
+        messages: []
+    };
+
+    // --- Установка WebSocket-соединения ---
+    function connectWebSocket() {
+        let wsHost = window.location.host;
+        if (!wsHost || wsHost === 'false') wsHost = 'localhost:8000';
+        const wsProtocol = window.location.protocol === "https:" ? "wss" : "ws";
+        const wsUrl = `${wsProtocol}://${wsHost}/ws/recruiter-training?position=${encodeURIComponent(currentPosition)}&personality=${encodeURIComponent(currentPersonality)}&experience=${encodeURIComponent(currentExperience)}&honesty=${encodeURIComponent(currentHonesty)}`;
+        
+        ws = new WebSocket(wsUrl);
+        updateConnectionStatus('Подключение...', 'yellow');
+        
+        ws.onopen = () => {
+            isConnected = true;
+            updateConnectionStatus('Подключено', 'green');
+            enableInterface();
+        };
+        
+        ws.onclose = (event) => {
+            isConnected = false;
+            disableInterface();
+            if (event.code === 1000) {
+                updateConnectionStatus('Сессия завершена', 'yellow');
+            } else {
+                updateConnectionStatus('Соединение потеряно. Обновите страницу для подключения.', 'red');
+            }
+        };
+        
+        ws.onerror = (error) => {
+            updateConnectionStatus('Ошибка соединения', 'red');
+        };
+        
+        ws.onmessage = handleWebSocketMessage;
+    }
+
+    // --- Управление спиннером ---
+    function showLoadingSpinner() {
+        document.getElementById('loading-spinner').classList.remove('hidden');
+    }
+
+    function hideLoadingSpinner() {
+        document.getElementById('loading-spinner').classList.add('hidden');
+    }
+
+    // --- Обработка входящих сообщений ---
+    function handleWebSocketMessage(event) {
+        try {
+            const response = JSON.parse(event.data);
+            
+            switch(response.type) {
+                case 'error':
+                    showError(`Ошибка: ${response.text}`);
+                    resetWaitingState();
+                    return;
+                
+                case 'assessment_progress':
+                    updateAssessmentProgress(response.progress, response.current_statement);
+                    return;
+                
+                case 'assessment_complete':
+                    // Сохраняем результаты оценки
+                    conversationHistory.psychological_assessment = response.results;
+                    // Переходим к странице оценки
+                    localStorage.setItem('trainingHistory', JSON.stringify(conversationHistory));
+                    window.location.href = '/recruiter-training-check';
+                    return;
+                
+                case 'text':
+                case 'voice':
+                    if (response.random_profile && !conversationHistory.random_profile) {
+                        conversationHistory.random_profile = response.random_profile;
+                    }
+                    processMessage(response);
+                    updateChatDisplay();
+                    hideStatusMessage();
+                    resetWaitingState();
+                    hideLoadingSpinner();
+                    break;
+            }
+        } catch (error) {
+            console.error('Error processing message:', error);
+            showError('Ошибка обработки сообщения');
+            resetWaitingState();
+            hideLoadingSpinner();
+        }
+    }
+
+    // --- Обработка ответа от сервера ---
+    function processMessage(response) {
+        if (response.type === 'voice' && response.user_text) addUserMessage(response.user_text);
+        if (response.content && response.content.trim()) {
+            addAssistantMessage(response.content);
+            if (response.type === 'voice' && response.audio) {
+                hideStatusMessage();
+                playAudio(response.audio);
+            }
+        }
+    }
+
+    // --- Управление сообщениями ---
+    function addUserMessage(content) {
+        const lastUserMessage = getLastMessageByRole('user');
+        if (!lastUserMessage || lastUserMessage.content !== content) {
+            conversationHistory.messages.push({ role: "user", content });
+        }
+    }
+
+    function addAssistantMessage(content) {
+        const lastAssistantMessage = getLastMessageByRole('assistant');
+        if (!lastAssistantMessage || lastAssistantMessage.content !== content) {
+            conversationHistory.messages.push({ role: "assistant", content });
+        }
+    }
+
+    function getLastMessageByRole(role) {
+        return conversationHistory.messages.filter(msg => msg.role === role).pop();
+    }
+
+    // --- Вспомогательные функции ---
+    function resetWaitingState() {
+        isWaitingForResponse = false;
+        enableInterface();
+        hideLoadingSpinner();  // Скрываем спиннер при сбросе состояния ожидания
+    }
+
+    function hideStatusMessage() {
+        updateConnectionStatus('', '');
+    }
+
+    function updateConnectionStatus(message, color) {
+        const statusElement = document.getElementById('connection-status');
+        statusElement.textContent = message;
+        if (color === 'green') {
+            statusElement.className = 'mb-2 p-2 text-center rounded bg-green-100 text-green-700';
+        } else if (color === 'yellow') {
+            statusElement.className = 'mb-2 p-2 text-center rounded bg-yellow-100 text-yellow-700';
+        } else if (color === 'red') {
+            statusElement.className = 'mb-2 p-2 text-center rounded bg-red-100 text-red-700';
+        }
+    }
+
+    function showError(message) {
+        const statusElement = document.getElementById('connection-status');
+        statusElement.textContent = message;
+        statusElement.className = 'mb-2 p-2 text-center rounded bg-red-100 text-red-700';
+        statusElement.classList.remove('hidden');
+    }
+
+    // --- Управление интерфейсом ---
+    function enableInterface() {
+        document.getElementById('messageText').disabled = false;
+        document.querySelector('#chat-form button').disabled = false;
+        document.getElementById('recordButton').disabled = false;
+    }
+
+    function disableInterface() {
+        document.getElementById('messageText').disabled = true;
+        document.querySelector('#chat-form button').disabled = true;
+        document.getElementById('recordButton').disabled = true;
+    }
+
+    // --- Отправка сообщений ---
+    function sendMessage(event) {
+        event.preventDefault();
+        if (!isConnected || isWaitingForResponse) return;
+        
+        const input = document.getElementById("messageText");
+        const message = input.value.trim();
+        if (message === "") return;
+
+        addUserMessage(message);
+        updateChatDisplay();
+        
+        showLoadingSpinner();  // Показываем спиннер перед отправкой
+        ws.send(JSON.stringify({
+            type: 'text',
+            content: message
+        }));
+
+        input.value = '';
+        isWaitingForResponse = true;
+        disableInterface();
+    }
+
+    // --- Обновление чата ---
+    function updateChatDisplay() {
+        const messagesEl = document.getElementById('messages');
+        messagesEl.innerHTML = "";
+        conversationHistory.messages.forEach(msg => {
+            const div = document.createElement('div');
+            if (msg.role === 'user') {
+                div.textContent = '［👤］: ' + msg.content;
+                div.className = 'mb-2 text-right';
+            } else if (msg.role === 'assistant') {
+                div.textContent = '［🤖］: ' + msg.content;
+                div.className = 'mb-2 text-left';
+            }
+            messagesEl.appendChild(div);
+        });
+        scrollChatToBottom();
+    }
+
+    function scrollChatToBottom() {
+        const messagesEl = document.getElementById('messages');
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+
+    // --- Запись и отправка аудио ---
+    async function setupAudioRecording() {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            mediaRecorder = new MediaRecorder(stream);
+            
+            mediaRecorder.ondataavailable = (event) => {
+                audioChunks.push(event.data);
+            };
+
+            mediaRecorder.onstop = async () => {
+                showLoadingSpinner();  // Показываем спиннер при остановке записи
+                const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                const reader = new FileReader();
+                
+                reader.onload = () => {
+                    const base64Audio = reader.result.split(',')[1];
+                    ws.send(JSON.stringify({
+                        type: 'voice',
+                        audio: base64Audio
+                    }));
+                };
+                
+                reader.readAsDataURL(audioBlob);
+                audioChunks = [];
+                isWaitingForResponse = true;
+                disableInterface();
+            };
+        } catch (error) {
+            console.error('Error accessing microphone:', error);
+            document.getElementById('recordButton').disabled = true;
+        }
+    }
+
+    function toggleRecording() {
+        if (!isRecording) {
+            mediaRecorder.start();
+            isRecording = true;
+            document.getElementById('recordButton').textContent = 'Остановить запись';
+            document.getElementById('recordButton').classList.add('bg-red-600');
+            document.getElementById('recordingStatus').textContent = 'Идет запись...';
+        } else {
+            mediaRecorder.stop();
+            isRecording = false;
+            document.getElementById('recordButton').textContent = 'Записать голос';
+            document.getElementById('recordButton').classList.remove('bg-red-600');
+            document.getElementById('recordingStatus').textContent = '';
+        }
+    }
+
+    function playAudio(base64Audio) {
+        const audio = new Audio(`data:audio/wav;base64,${base64Audio}`);
+        audio.play();
+    }
+
+    // --- Завершение тренировки ---
+    function goToEvaluation() {
+        if (!conversationHistory.messages.length) {
+            alert("Нет данных для оценки. Проведите тренировку перед оценкой.");
+            return;
+        }
+
+        // Показываем модальное окно с прогрессом
+        showProgressModal();
+        
+        // Отправляем сообщение о завершении сессии
+        ws.send(JSON.stringify({
+            type: "end_session",
+            ...conversationHistory
+        }));
+    }
+
+    function updateAssessmentProgress(progress, currentStatement) {
+        const progressBar = document.getElementById('progressBar');
+        const progressStatus = document.getElementById('progressStatus');
+        
+        progressBar.style.width = `${progress}%`;
+        progressStatus.textContent = `Оценка утверждения: ${currentStatement}`;
+    }
+
+    // Добавляем HTML для модального окна с прогрессом
+    document.body.insertAdjacentHTML('beforeend', `
+        <div id="progressModal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center">
+            <div class="bg-white p-6 rounded-lg shadow-xl max-w-md w-full">
+                <h3 class="text-lg font-semibold mb-4">Проводится психологическая оценка</h3>
+                <div class="mb-4">
+                    <div class="w-full bg-gray-200 rounded-full h-2.5">
+                        <div id="progressBar" class="bg-blue-600 h-2.5 rounded-full" style="width: 0%"></div>
+                    </div>
+                </div>
+                <p id="progressStatus" class="text-sm text-gray-600 text-center">Подготовка к оценке...</p>
+            </div>
+        </div>
+    `);
+
+    function showProgressModal() {
+        const modal = document.getElementById('progressModal');
+        modal.classList.remove('hidden');
+    }
+
+    function hideProgressModal() {
+        const modal = document.getElementById('progressModal');
+        modal.classList.add('hidden');
+    }
+
+    // --- Функции для экспорта данных ---
+    function exportInterviewData() {
+        const trainingData = {
+            ...conversationHistory  // Используем все данные из conversationHistory, включая random_profile
+        };
+
+        if (!trainingData.messages.length) {
+            throw new Error("Нет сообщений для сохранения");
+        }
+
+        const jsonData = JSON.stringify(trainingData, null, 2);
+        const blob = new Blob([jsonData], { type: 'application/json' });
+        const fileName = generateFileName(currentPosition);
+        downloadBlob(blob, fileName);
+    }
+
+    function generateFileName(position) {
+        const sanitizedPosition = position.replace(/[^a-zA-Zа-яА-Я0-9]/g, '_').substring(0, 20);
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        return `recruiter_training_${sanitizedPosition}_${timestamp}.json`;
+    }
+
+    function downloadBlob(blob, fileName) {
+        const downloadLink = document.createElement('a');
+        downloadLink.href = URL.createObjectURL(blob);
+        downloadLink.download = fileName;
+        document.body.appendChild(downloadLink);
+        downloadLink.click();
+        document.body.removeChild(downloadLink);
+        URL.revokeObjectURL(downloadLink.href);
+    }
+
+    // --- Инициализация ---
+    setupAudioRecording();
+    connectWebSocket();
+    </script>
+</body>
+</html> 

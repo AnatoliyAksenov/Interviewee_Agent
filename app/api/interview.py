@@ -66,7 +66,7 @@ async def websocket_interview(ws: WebSocket, persona: str = Query("Junior Python
                 await ws.send_json({"type": "text", "content": agent_text})
     except WebSocketDisconnect:
         pass
-
+        
 
 # Вебсокет-эндпоинт для интервью
 @router.websocket("/ws/interview_profile")

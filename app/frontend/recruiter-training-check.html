@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Оценка кандидата</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="flex flex-col justify-center items-center bg-[#2B2D33] min-h-screen font-sans">
+    <div class="bg-white shadow mt-6 p-6 rounded w-full max-w-4xl">
+        <h1 class="text-2xl font-bold mb-6 text-center">Оценка компетенций кандидата</h1>
+        
+        <!-- Форма оценки -->
+        <form id="evaluationForm" class="space-y-6">
+            <!-- Заинтересованность -->
+            <div class="p-4 bg-gray-50 rounded">
+                <h3 class="font-semibold mb-2">Заинтересованность</h3>
+                <div class="flex gap-4">
+                    <label class="flex items-center">
+                        <input type="radio" name="interest" value="low" class="mr-2" required>
+                        Низкая
+                    </label>
+                    <label class="flex items-center">
+                        <input type="radio" name="interest" value="medium" class="mr-2">
+                        Средняя
+                    </label>
+                    <label class="flex items-center">
+                        <input type="radio" name="interest" value="high" class="mr-2">
+                        Высокая
+                    </label>
+                </div>
+            </div>
+
+            <!-- Контроль -->
+            <div class="p-4 bg-gray-50 rounded">
+                <h3 class="font-semibold mb-2">Контроль</h3>
+                <div class="flex gap-4">
+                    <label class="flex items-center">
+                        <input type="radio" name="control" value="low" class="mr-2" required>
+                        Низкий
+                    </label>
+                    <label class="flex items-center">
+                        <input type="radio" name="control" value="medium" class="mr-2">
+                        Средний
+                    </label>
+                    <label class="flex items-center">
+                        <input type="radio" name="control" value="high" class="mr-2">
+                        Высокий
+                    </label>
+                </div>
+            </div>
+
+            <!-- Любознательность -->
+            <div class="p-4 bg-gray-50 rounded">
+                <h3 class="font-semibold mb-2">Любознательность</h3>
+                <div class="flex gap-4">
+                    <label class="flex items-center">
+                        <input type="radio" name="curiosity" value="low" class="mr-2" required>
+                        Низкая
+                    </label>
+                    <label class="flex items-center">
+                        <input type="radio" name="curiosity" value="medium" class="mr-2">
+                        Средняя
+                    </label>
+                    <label class="flex items-center">
+                        <input type="radio" name="curiosity" value="high" class="mr-2">
+                        Высокая
+                    </label>
+                </div>
+            </div>
+
+            <!-- Уверенность -->
+            <div class="p-4 bg-gray-50 rounded">
+                <h3 class="font-semibold mb-2">Уверенность</h3>
+                <div class="flex gap-4">
+                    <label class="flex items-center">
+                        <input type="radio" name="confidence" value="low" class="mr-2" required>
+                        Низкая
+                    </label>
+                    <label class="flex items-center">
+                        <input type="radio" name="confidence" value="medium" class="mr-2">
+                        Средняя
+                    </label>
+                    <label class="flex items-center">
+                        <input type="radio" name="confidence" value="high" class="mr-2">
+                        Высокая
+                    </label>
+                </div>
+            </div>
+
+            <!-- Карьерная адаптивность -->
+            <div class="p-4 bg-blue-50 rounded border-2 border-blue-200">
+                <h3 class="font-semibold mb-2 text-blue-800">Карьерная адаптивность</h3>
+                <div class="flex gap-4">
+                    <label class="flex items-center">
+                        <input type="radio" name="career_adaptability" value="low" class="mr-2" required>
+                        Низкая
+                    </label>
+                    <label class="flex items-center">
+                        <input type="radio" name="career_adaptability" value="medium" class="mr-2">
+                        Средняя
+                    </label>
+                    <label class="flex items-center">
+                        <input type="radio" name="career_adaptability" value="high" class="mr-2">
+                        Высокая
+                    </label>
+                </div>
+            </div>
+
+            <!-- Кнопка завершения -->
+            <div class="flex justify-center mt-6">
+                <button type="submit" class="bg-green-600 hover:bg-green-700 px-6 py-3 rounded text-white font-semibold">
+                    Перейти к результатам
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Получаем историю беседы из localStorage
+            const trainingHistory = JSON.parse(localStorage.getItem('trainingHistory') || '{}');
+            
+            // Обработка отправки формы
+            document.getElementById('evaluationForm').addEventListener('submit', async function(e) {
+                e.preventDefault();
+                
+                // Собираем данные формы
+                const formData = {
+                    interest: document.querySelector('input[name="interest"]:checked').value,
+                    control: document.querySelector('input[name="control"]:checked').value,
+                    curiosity: document.querySelector('input[name="curiosity"]:checked').value,
+                    confidence: document.querySelector('input[name="confidence"]:checked').value,
+                    career_adaptability: document.querySelector('input[name="career_adaptability"]:checked').value
+                };
+
+                try {
+                    // Отправляем данные на сервер
+                    const response = await fetch('/save-evaluation', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            timestamp: trainingHistory.timestamp,
+                            evaluation: formData
+                        })
+                    });
+
+                    if (!response.ok) {
+                        throw new Error('Ошибка при сохранении оценки');
+                    }
+
+                    // Получаем данные от сервера
+                    const result = await response.json();
+
+                    // Создаем и скачиваем файл
+                    const blob = new Blob([JSON.stringify(result.data, null, 2)], { type: 'application/json' });
+                    const downloadLink = document.createElement('a');
+                    downloadLink.href = URL.createObjectURL(blob);
+                    downloadLink.download = result.file_name;
+                    document.body.appendChild(downloadLink);
+                    downloadLink.click();
+                    document.body.removeChild(downloadLink);
+
+                    // Сохраняем результаты в localStorage для следующей страницы
+                    localStorage.setItem('assessmentResults', JSON.stringify(result.data));
+                    
+                    // Перенаправляем на страницу результатов
+                    window.location.href = '/recruiter-training-check-results';
+                } catch (error) {
+                    console.error('Ошибка:', error);
+                    alert('Произошла ошибка при сохранении оценки. Пожалуйста, попробуйте еще раз.');
+                }
+            });
+        });
+    </script>
+</body>
+</html> 
