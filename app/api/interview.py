@@ -7,7 +7,8 @@ from app.model.ttt import TTT
 from app.model.stt import STT
 from app.model.tts import TTS
 from app.agents.prompts.utils import load_prompts
-from app.agents.profiles.utils import load_profiles
+from app.agents.profiles.utils import load_profiles, render_candidate_profile
+from app.agents.profiles.profiles import profile_configs
 from pprint import pp
 from agents import Runner
 from app.agents.interviewee_agent import create_interviewee_agent
@@ -24,6 +25,7 @@ tts = TTS()
 
 prompts = load_prompts("persona_system_prompt.yaml")
 profiles = load_profiles("main_profiles.yaml")
+
 
 # Вебсокет-эндпоинт для интервью
 @router.websocket("/ws/interview")
@@ -68,10 +70,13 @@ async def websocket_interview(ws: WebSocket, persona: str = Query("Junior Python
 
 # Вебсокет-эндпоинт для интервью
 @router.websocket("/ws/interview_profile")
-async def websocket_interview_profile(ws: WebSocket, profile: str = Query("Select profile id")):
+async def websocket_interview_profile(ws: WebSocket, profile: str = Query("strong_profile")):
     await ws.accept()  # Принимаем подключение
     # системный промпт для агента на основе выбранной персоны и навыка
-    system_prompt = profiles["main_profile"]
+    rendered_profile = render_candidate_profile(profile_configs[profile])
+
+    system_prompt = profiles["main_profile"].format(profile=rendered_profile, **profile_configs[profile])
+
     agent = create_interviewee_agent(system_prompt)  # агент для интервью
     try:
         while True:
