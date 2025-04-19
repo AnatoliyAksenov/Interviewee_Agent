@@ -22,7 +22,14 @@
                     placeholder="Например: Senior Python Developer, Junior Frontend Engineer, DevOps Engineer" 
                     required
                 >
-                <p class="text-sm text-gray-500 mt-1">Укажите должность, на которую проводите собеседование (включая уровень: Junior/Middle/Senior)</p>
+                <div class="text-sm text-gray-500 mt-2 space-y-1">
+                    <p>Укажите должность, на которую проводите собеседование. Уровень кандидата определяется автоматически по следующим словам в названии позиции:</p>
+                    <ul class="list-disc pl-5 space-y-1">
+                        <li><span class="font-medium">Junior</span> → начальный уровень (0-2 года опыта)</li>
+                        <li><span class="font-medium">Middle</span> или отсутствие уровня → средний уровень (2-5 лет опыта)</li>
+                        <li><span class="font-medium">Senior/Lead/Head</span> → высокий уровень (более 5 лет опыта)</li>
+                    </ul>
+                </div>
             </div>
 
             <!-- Тип личности (скрытое поле) -->
@@ -69,6 +76,8 @@
         const positionLower = position.toLowerCase();
         if (positionLower.includes("junior")) {
             experience = "beginner";
+        } else if (positionLower.includes("middle")) {
+            experience = "intermediate";
         } else if (positionLower.includes("senior")) {
             experience = "expert";
         } else if (positionLower.includes("lead") || positionLower.includes("head")) {
