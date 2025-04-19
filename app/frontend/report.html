@@ -37,6 +37,11 @@
                 <h2 class="font-bold text-red-700">Результат (Result)</h2>
                 <div id="result" class="bg-gray-50 p-3 border rounded text-gray-800 whitespace-pre-wrap">-</div>
             </div>
+
+            <div>
+                <h2 class="font-bold text-black-700">Итог</h2>
+                <div id="recommendation" class="bg-gray-50 p-3 border rounded text-gray-800 whitespace-pre-wrap">-</div>
+            </div>
         </div>
         
         <div class="mt-6 text-center">
@@ -82,6 +87,7 @@
                     document.getElementById('task').textContent = data.Task || "-";
                     document.getElementById('action').textContent = data.Action || "-";
                     document.getElementById('result').textContent = data.Result || "-";
+                    document.getElementById('recommendation').textContent = data.Recommendation || "-";
                     
                     // Скрываем индикатор загрузки и показываем результаты
                     loadingIndicator.classList.add('hidden');
